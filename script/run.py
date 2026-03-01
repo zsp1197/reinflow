@@ -25,9 +25,13 @@
 Launcher for all experiments. Download pre-training data, normalization statistics, and pre-trained checkpoints if needed.
 Revised by ReinFlow Authors to accomodate resume training and fixing the kitchen tasks import error.
 """
-# clear python cache automatically.
+import os
+import sys
+import logging
+import math
+import hydra
+from util.dirs import REINFLOW_DIR  # Initialize environment variables early
 from util.clear_pycache import clean_pycache
-from util.dirs import REINFLOW_DIR
 clean_pycache(directory=REINFLOW_DIR)
 
 # register kitchen tasks in advance. prevent env not found error. 

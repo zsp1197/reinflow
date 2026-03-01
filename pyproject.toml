@@ -26,7 +26,8 @@ dependencies = [
     "wandb==0.17.7",
     "pandas==2.0.3",
     "pypdf>=3.9.0",
-    "seaborn==0.13.2"
+    "seaborn==0.13.2",
+    "mjrl @ git+https://github.com/aravindr93/mjrl.git"
 ]
 
 [project.optional-dependencies]
@@ -72,6 +73,7 @@ all = [
     "ipdb==0.13.13",
     "patchelf",
     "pin",
+    "mjrl @ git+https://github.com/aravindr93/mjrl.git",
     "robomimic @ git+https://github.com/ARISE-Initiative/robomimic.git",
     "robosuite @ git+https://github.com/ARISE-Initiative/robosuite.git@v1.4.1",
 ]

@@ -22,12 +22,29 @@
 
 
 import os
-REINFLOW_DIR=os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if not REINFLOW_DIR == os.environ['REINFLOW_DIR']:
-    raise ValueError(f"Hey did you correctly set up your env variable REINFLOW_DIR? It shows that REINFLOW_DIR={os.environ['REINFLOW_DIR']} but the code rest in {REINFLOW_DIR}. ")
+
+# Base directory of the project
+REINFLOW_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+# Handle REINFLOW_DIR
+if 'REINFLOW_DIR' not in os.environ:
+    os.environ['REINFLOW_DIR'] = REINFLOW_DIR
+else:
+    # If set, we respect it but log a warning if it differs significantly
+    env_dir = os.path.abspath(os.environ['REINFLOW_DIR'])
+    if env_dir != REINFLOW_DIR:
+        import logging
+        logging.warning(f"REINFLOW_DIR environment variable ({env_dir}) differs from detected path ({REINFLOW_DIR}). Using detected path for consistency.")
+        os.environ['REINFLOW_DIR'] = REINFLOW_DIR
 
 REINFLOW_CFG_DIR = os.path.join(REINFLOW_DIR, 'cfg')
 
+# Handle REINFLOW_DATA_DIR: default to 'data' in project root
+if 'REINFLOW_DATA_DIR' not in os.environ:
+    os.environ['REINFLOW_DATA_DIR'] = os.path.join(REINFLOW_DIR, 'data')
 REINFLOW_DATA_DIR = os.environ['REINFLOW_DATA_DIR']
 
+# Handle REINFLOW_LOG_DIR: default to 'log' in project root
+if 'REINFLOW_LOG_DIR' not in os.environ:
+    os.environ['REINFLOW_LOG_DIR'] = os.path.join(REINFLOW_DIR, 'log')
 REINFLOW_LOG_DIR =  os.environ['REINFLOW_LOG_DIR']
