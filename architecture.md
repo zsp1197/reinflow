@@ -1,138 +1,116 @@
-# ReinFlow 训练环境启动指南
+# ReinFlow 项目架构与启动全指南
 
-在这个服务器（RTX 4090）上，我们已经成功跑通并验证了 ReinFlow 的三种主要虚拟环境。您在启动具体的实验时，只需要按照以下步骤**切换 config 的目录和名称**即可启动不同环境的并行训练：
+本指南旨在帮助您从零开始配置环境、下载必要资产并启动 ReinFlow 训练。完成以下步骤后，您将能够复现论文中的实验结果。
 
-### 1. 激活环境与路径 (每次新开终端必跑)
-首先，我们需要激活已经安装好所有依赖的 `conda` 虚拟环境，并声明项目和数据的路径。
+---
 
+## 🛠️ 第一部分：环境配置 (从零开始)
+
+如果您刚刚 `git clone` 了本项目，请按照以下顺序执行操作：
+
+### 1. 基础依赖与相关库安装
+ReinFlow 依赖于多个外部仿真引擎和算法库。
+
+*   **MuJoCo 210**: 
+    1.  下载 `mujoco210` Linux 二进制文件并解压到 `~/.mujoco/mujoco210`。
+    2.  设置环境变量：`export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/.mujoco/mujoco210/bin`。
+*   **mjrl (Franka Kitchen 必需)**:
+    1.  克隆 [mjrl](https://github.com/aravindr93/mjrl) 仓库。
+    2.  在 mjrl 目录下运行 `pip install -e .`。
+*   **Robomimic & Robosuite**:
+    1.  参考 `installation/reinflow-setup.md` 安装特定版本的 `robomimic` 和 `robosuite`。
+
+### 2. 创建 Conda 环境
 ```bash
-# 激活 Conda 环境
-source ~/anaconda3/etc/profile.d/conda.sh
+conda create -n reinflow python=3.8 -y
 conda activate reinflow
+pip install -e .  # 以可编辑模式安装 ReinFlow 本身
+```
 
-# 导出挂载好的数据和日志路径 (重要！防止C盘被塞满，转移至挂载盘)
-export REINFLOW_DIR="/mnt/c/codes/flowmatching/ReinFlow"
-export REINFLOW_DATA_DIR="/mnt/d/assets/data"
-export REINFLOW_LOG_DIR="/mnt/d/assets/log"
-export PYTHONPATH=.
+### 3. 设置路径变量 (关键)
+项目使用环境变量来定位数据和日志。请运行内置脚本或手动导出：
+```bash
+# 运行脚本会引导您设置路径并将其写入 ~/.bashrc
+bash ./script/set_path.sh
+# 之后务必执行：
+source ~/.bashrc
 ```
 
 ---
 
-### 2. 启动主要的训练命令 (请根据需要选择环境)
+## 📦 第二部分：下载必要资产 (Assets)
 
-所有的训练都是通过 `script/run.py` 配合 [Hydra](https://hydra.cc/) 配置系统进行启动的。要想切换虚拟环境，您只需要更改 `--config-dir` 指向的环境配置文件目录，以及 `--config-name` 指向的算法配置文件。
+ReinFlow 的微调 (Fine-tuning) 流程依赖于 **预训练权重** 和 **归一化数据**，这些文件不包含在 Git 仓库中。
 
-#### 方案 A：基于状态控制的 D4RL / Gym 运动环境 (如 Ant, Walker2d)
-用于测试基础的连续控制能力。
+### 1. 归一化统计数据 (Normalization Data)
+所有的配置文件都包含类似 `normalization_path: ${oc.env:REINFLOW_DATA_DIR}/gym/${env_name}/normalization.npz` 的路径。
+*   **获取方式**: 运行预训练脚本会自动生成，或者从官方提供的资源包中下载并放入 `${REINFLOW_DATA_DIR}` 对应目录下。
 
+### 2. 预训练权重 (Pre-trained Checkpoints)
+微调需要加载一个已有的 Baseline。
+*   **放置路径**: 请确保您的 `.pt` 权重文件放在配置文件中 `base_policy_path` 指定的位置。
+*   **默认配置示例**: 如果使用的是 `ant-v2`，路径通常为 `${REINFLOW_LOG_DIR}/gym/pretrain/ant-v2/ReFlow/.../checkpoint/state_50.pt`。
+
+---
+
+## 🚀 第三部分：启动训练实验
+
+在激活 `reinflow` 环境并确保路径变量正确后，使用以下命令：
+
+### 方案 A：基于状态控制 (D4RL / Gym)
 ```bash
 python script/run.py \
     --config-dir=cfg/gym/finetune/ant-v2 \
     --config-name=ft_ppo_reflow_mlp \
-    min_std=0.08 max_std=0.16 train.ent_coef=0.03 \
     wandb=null device=cuda:0 sim_device=cuda:0
 ```
-> **修改环境**：如果想训练 Walker2d 等，只需将 `--config-dir=cfg/gym/finetune/ant-v2` 替换为 `cfg/gym/finetune/walker2d-medium-v2` 等存在于 `cfg/gym/finetune/` 下的文件夹即可。
 
-#### 方案 B：多任务状态驱动机械臂 (Franka Kitchen)
-用于证明策略处理多模态复杂任务分布的能力。Kitchen 环境通常搭配 `shortcut` 算法或特定的并行配置。
-
+### 方案 B：机械臂操作 (Franka Kitchen)
 ```bash
 python script/run.py \
     --config-dir=cfg/gym/finetune/kitchen-mixed-v0 \
     --config-name=ft_ppo_shortcut_mlp \
-    train.ent_coef=0.01 \
     wandb=null device=cuda:0 sim_device=cuda:0
 ```
-> **修改环境**：可以替换目录为 `cfg/gym/finetune/kitchen-complete-v0` 等。
 
-#### 方案 C：基于视觉 (视角图像输入) 的 Robomimic 操作任务
-通过直接输入图像像素预测动作，这对于评估视觉泛化极其重要。(注：该环境自带极速的 EGL GPU 渲染引擎)
-
+### 方案 C：基于视觉输入 (Robomimic)
 ```bash
 python script/run.py \
     --config-dir=cfg/robomimic/finetune/square \
     --config-name=ft_ppo_reflow_mlp_img \
     wandb=null device=cuda:0 sim_device=cuda:0
 ```
-> **修改环境**：可以替换目录为 `cfg/robomimic/finetune/can` 或 `transport`。
-> **注意**：视觉模型因为引入了卷积视觉特征提取器，所以对应的 `config-name` 通常是以 `_img` 结尾（如 `ft_ppo_reflow_mlp_img`）。
 
 ---
 
-### 🌟 通用微调参数解释：
+# 🏗️ 第四部分：项目架构说明
 
-| 参数 | 解释 |
-| :--- | :--- |
-| `min_std=0.08 max_std=0.16` | **RL 探索噪声设定**。如官方文档提及：“SFT 成功率较高时，放宽噪声对数方差到 [0.08, 0.16] 通常是一个好习惯。”这个参数调节了微调过程中的动作探索空间。 |
-| `train.ent_coef=0.03` | **熵奖励系数 (Entropy Coefficient)**。帮助策略保持探索的多样性，当策略遇到瓶颈时增加此数值通常有益。 |
-| `wandb=null` | 表示**禁用** Weights & Biases 的在线网络同步日志上传。在断网、未登录或者只需要本地记录时非常有效，所有的曲线依旧会通过 TensorBoard 保存到本地目录。 |
-| `device=cuda:0 sim_device=cuda:0` | 强制模型和数据计算跑在 4090 显卡上，保障最快计算速度和 GPU 环境并行渲染效率。 |
-
-- *附加指令*：如果您想在后台不断保持任务运行（即使关闭终端终端），可以在任意一个指令末尾加上 `> /mnt/d/assets/downloads/train_log.log 2>&1 &`。
-
-
-
-# ReinFlow 项目架构文档
-
-ReinFlow 是基于 Flow Matching (FM) 和 Reinforcement Learning (RL) 的动作生成框架。本项目采用高度模块化的设计，结合 [Hydra](https://hydra.cc/) 配置系统实现算法与环境的灵活解耦。
+ReinFlow 采用模块化设计，结合 [Hydra](https://hydra.cc/) 实现算法与环境解耦。
 
 ## 1. 核心流程图
 
 ```mermaid
 graph TD
-    A[script/run.py] -- "1. 实例化 (hydra_target)" --> B[TrainPPOFlowAgent]
+    A[script/run.py] -- "1. 实例化" --> B[TrainPPOFlowAgent]
     B -- "2. 初始化" --> C[PPOFlow Model]
     B -- "2. 初始化" --> D[PPOFlowBuffer]
     
     subgraph "训练循环 (Iteration)"
-        B -- "3. 采样 (get_samples)" --> E[venv 并行环境]
-        E -- "4. 返回经验 (obs, r, done)" --> B
+        B -- "3. 采样" --> E[venv 并行环境]
+        E -- "4. 返回经验" --> B
         B -- "5. 存储" --> D
-        D -- "6. 整理小批次 (make_dataset)" --> B
-        B -- "7. 计算 Loss (agent_update)" --> C
-        C -- "8. 梯度更新" --> F[Policy/Critic 网络]
+        D -- "6. 整理批次" --> B
+        B -- "7. 更新梯度" --> C
+        C -- "8. 权重更新" --> F[Policy/Critic]
     end
 ```
 
-## 2. 模块职责说明
+## 2. 关键组件索引
 
-### 🚀 启动入口 (Entry Point)
-*   **文件**: [run.py](file:///mnt/c/codes/flowmatching/ReinFlow/script/run.py)
-*   **职能**: 解析命令行参数，加载 YAML 配置，动态构建 Agent 对象并启动训练。
-
-### 🧠 训练指挥官 (Agent)
-*   **文件**: [train_ppo_flow_agent.py](file:///mnt/c/codes/flowmatching/ReinFlow/agent/finetune/reinflow/train_ppo_flow_agent.py)
-*   **类名**: `TrainPPOFlowAgent` (继承自 `TrainAgent`)
-*   **职能**:
-    *   管理环境 `venv` 的交互。
-    *   调用模型生成动作并收集轨迹。
-    *   计算优势函数 (GAE) 并触发模型权重更新。
-
-### 📊 数据缓存 (Replay Buffer)
-*   **文件**: [buffer.py](file:///mnt/c/codes/flowmatching/ReinFlow/agent/finetune/reinflow/buffer.py)
-*   **类名**: `PPOFlowBuffer`
-*   **职能**: 专门针对流模型设计的缓存，不仅存储传统的 RL 数据，还记录了 **Action Chains**（生成动作的 ODE 轨迹），这是计算 Flow Matching 概率路径的关键。
-
-### ⚖️ 算法灵魂 (Model/Algorithm)
-*   **文件**: [ppoflow.py](file:///mnt/c/codes/flowmatching/ReinFlow/model/flow/ft_ppo/ppoflow.py)
-*   **类名**: `PPOFlow`
-*   **职能**: 
-    *   **推理**: 实现从高斯噪声到动作的 ODE 求解过程 (`get_actions`)。
-    *   **训练**: 定义结合了 PPO 优化目标和 Flow Matching 损失的复合 Loss 函数 (`loss`)。
-
-### 🕸️ 神经网络 (Network Architecture)
-*   **文件**: [mlp_flow.py](file:///mnt/c/codes/flowmatching/ReinFlow/model/flow/mlp_flow.py)
-*   **类名**: `FlowMLP`
-*   **职能**: 定义具体的前向传播网络，用于预测流模型的速度向量场 $v(x_t, t, s)$。
-
-## 3. 快速索引表
-
-| 核心功能 | 核心类/函数 | 关键文件路径 |
+| 功能模块 | 关键类/函数 | 文件路径 |
 | :--- | :--- | :--- |
-| **训练主循环** | `TrainPPOFlowAgent.run` | `agent/finetune/reinflow/train_ppo_flow_agent.py` |
-| **动作生成流程** | `PPOFlow.get_actions` | `model/flow/ft_ppo/ppoflow.py` |
-| **PPO+FM 损失** | `PPOFlow.loss` | `model/flow/ft_ppo/ppoflow.py` |
-| **ODE 速度场预测**| `FlowMLP` | `model/flow/mlp_flow.py` |
-| **采样轨迹存储** | `PPOFlowBuffer` | `agent/finetune/reinflow/buffer.py` |
+| **训练循环** | `TrainPPOFlowAgent.run` | `agent/finetune/reinflow/train_ppo_flow_agent.py` |
+| **PPO+FM 损失**| `PPOFlow.loss` | `model/flow/ft_ppo/ppoflow.py` |
+| **ODE 求解器** | `PPOFlow.get_actions` | `model/flow/ft_ppo/ppoflow.py` |
+| **网络定义** | `FlowMLP` | `model/flow/mlp_flow.py` |
+| **轨迹缓存** | `PPOFlowBuffer` | `agent/finetune/reinflow/buffer.py` |
