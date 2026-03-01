@@ -46,18 +46,38 @@ class TrainAgent:
         # Wandb       
         self.use_wandb = cfg.wandb is not None
         if self.use_wandb:
-            # Check if offline mode is enabled (e.g., via config or environment variable)
-            offline_mode = cfg.wandb.get("offline_mode", False)  # Add this to your config if desired
-            if offline_mode:
-                wandb_dir = cfg.wandb.get("dir", "./wandb_offline")  # Local directory for offline logs
+            # Handle the case where wandb is specified purely as a string from CLI (e.g. wandb=online)
+            if isinstance(cfg.wandb, str):
+                offline_mode = (cfg.wandb == "offline")
+                wandb_dir = "./wandb_offline" if offline_mode else "./wandb"
+                notes_path = "notes.txt"
+                wandb_entity = None
+                wandb_project = cfg.env.name
+                wandb_run_name = None
             else:
-                wandb_dir = cfg.wandb.get("dir", "./wandb")
+                offline_mode = cfg.wandb.get("offline_mode", False)
+                wandb_dir = cfg.wandb.get("dir", "./wandb_offline" if offline_mode else "./wandb")
+                notes_path = cfg.wandb.get("notes_file", "notes.txt")
+                wandb_entity = cfg.wandb.get("entity", None)
+                wandb_project = cfg.wandb.get("project", None)
+                wandb_run_name = cfg.wandb.get("run", None)
             
             os.makedirs(wandb_dir, exist_ok=True)  # Ensure the directory exists
+            
+            # Read notes from local file if exists
+            wandb_notes = None
+            if os.path.exists(notes_path):
+                try:
+                    with open(notes_path, "r", encoding="utf-8") as f:
+                        wandb_notes = f.read().strip()
+                except Exception as e:
+                    log.warning(f"Failed to read wandb notes file {notes_path}: {e}")
+
             wandb.init(
-                entity=cfg.wandb.entity,
-                project=cfg.wandb.project,
-                name=cfg.wandb.run,
+                entity=wandb_entity,
+                project=wandb_project,
+                name=wandb_run_name,
+                notes=wandb_notes,
                 config=OmegaConf.to_container(cfg, resolve=True),
                 mode="offline" if offline_mode else "online",  # Switch to offline mode
                 dir=wandb_dir,  # Specify local directory for offline logs

@@ -76,20 +76,36 @@ def get_scheduler(schedule_type: str, **kwargs):
     elif schedule_type == 'linear':
         assert len(kwargs) == 4
         eps_min, hold_steps, eps_max, anneal_steps = float(kwargs['min']), int(kwargs['hold_steps']), float(kwargs['max']), int(kwargs['anneal_steps'])
+        if anneal_steps == 0:
+            return lambda x: eps_min if x >= hold_steps else eps_max
         return lambda x: np.clip(eps_max - (eps_max - eps_min) * (x - hold_steps) / anneal_steps, eps_min, eps_max)
     elif schedule_type == 'linear_warmup':
         assert len(kwargs) == 5
         eps_min, warmup, eps_max, hold_steps, anneal_steps = float(kwargs['min']), int(kwargs['warmup_steps']), float(kwargs['max']), int(kwargs['hold_steps']), int(kwargs['anneal_steps'])
+        if anneal_steps == 0:
+            def _linear_warmup_no_anneal(x):
+                if x < warmup:
+                    return (eps_max-eps_min)/warmup * x + eps_min if warmup > 0 else eps_max
+                return eps_min if x >= (hold_steps + warmup) else eps_max
+            return _linear_warmup_no_anneal
         if warmup == 0:
             return lambda x: np.clip(eps_max - (eps_max - eps_min) * (x - hold_steps) / anneal_steps, eps_min, eps_max)
         return lambda x: (eps_max-eps_min)/warmup * x + eps_min if x < warmup else np.clip(eps_max - (eps_max - eps_min) * (x - hold_steps - warmup) / anneal_steps, eps_min, eps_max)
     elif schedule_type == 'cosine':
         assert len(kwargs) == 4
         eps_max, hold_steps, anneal_steps, eps_min= float(kwargs['max']), int(kwargs['hold_steps']), int(kwargs['anneal_steps']), float(kwargs['min'])
+        if anneal_steps == 0:
+            return lambda x: eps_min if x >= hold_steps else eps_max
         return lambda x: eps_min + (eps_max - eps_min) * 0.5 * (1 + np.cos(np.clip((x - hold_steps) / anneal_steps, 0, 1) * np.pi))
     elif schedule_type == 'cosine_warmup':
         assert len(kwargs) == 5
         eps_min, warmup, eps_max, hold_steps, anneal_steps = float(kwargs['min']), int(kwargs['warmup_steps']), float(kwargs['max']), int(kwargs['hold_steps']), int(kwargs['anneal_steps'])
+        if anneal_steps == 0:
+            def _cosine_warmup_no_anneal(x):
+                if x < warmup:
+                    return (eps_max-eps_min)/warmup * x + eps_min if warmup > 0 else eps_max
+                return eps_min if x >= (hold_steps + warmup) else eps_max
+            return _cosine_warmup_no_anneal
         if warmup == 0:
             return lambda x: eps_min + (eps_max - eps_min) * 0.5 * (1 + np.cos(np.clip((x - hold_steps-warmup) / anneal_steps, 0, 1) * np.pi))
         return lambda x: (eps_max-eps_min)/warmup * x + eps_min if x < warmup else eps_min + (eps_max - eps_min) * 0.5 * (1 + np.cos(np.clip((x - hold_steps-warmup) / anneal_steps, 0, 1) * np.pi))
