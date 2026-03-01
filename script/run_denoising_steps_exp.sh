@@ -24,7 +24,7 @@ EOF
 
     # 开始执行当前参数下的训练配置
     # 注意：在 ft_ppo_reflow_mlp.yaml 中，对应的控制变量是 `denoising_steps` 以及 `ft_denoising_steps`
-    python script/run.py \
+    PYTHONPATH=$(pwd) python script/run.py \
         --config-dir=cfg/gym/finetune/ant-v2 \
         --config-name=ft_ppo_reflow_mlp \
         denoising_steps=${step} \
