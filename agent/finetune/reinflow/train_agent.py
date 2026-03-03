@@ -33,6 +33,7 @@ import torch
 import hydra
 import logging
 import wandb
+from torch.utils.tensorboard import SummaryWriter
 log = logging.getLogger(__name__)
 from env.gym_utils import make_async
 from util.reproducibility import set_seed_everywhere
@@ -45,55 +46,6 @@ class TrainAgent:
         set_seed_everywhere(self.seed)
         # Wandb       
         self.use_wandb = cfg.wandb is not None
-        if self.use_wandb:
-            # Handle the case where wandb is specified purely as a string from CLI (e.g. wandb=online)
-            if isinstance(cfg.wandb, str):
-                offline_mode = (cfg.wandb == "offline")
-                wandb_dir = "./wandb_offline" if offline_mode else "./wandb"
-                notes_path = "notes.txt"
-                wandb_entity = None
-                wandb_project = cfg.env.name
-                wandb_run_name = None
-            else:
-                offline_mode = cfg.wandb.get("offline_mode", False)
-                wandb_dir = cfg.wandb.get("dir", "./wandb_offline" if offline_mode else "./wandb")
-                notes_path = cfg.wandb.get("notes_file", "notes.txt")
-                wandb_entity = cfg.wandb.get("entity", None)
-                wandb_project = cfg.wandb.get("project", None)
-                wandb_run_name = cfg.wandb.get("run", None)
-            
-            # Prioritize top-level run_name if provided
-            if cfg.get("run_name") is not None:
-                wandb_run_name = cfg.run_name
-            
-            os.makedirs(wandb_dir, exist_ok=True)  # Ensure the directory exists
-            
-            # Read notes from local file if exists
-            wandb_notes = None
-            if os.path.exists(notes_path):
-                try:
-                    with open(notes_path, "r", encoding="utf-8") as f:
-                        wandb_notes = f.read().strip()
-                except Exception as e:
-                    log.warning(f"Failed to read wandb notes file {notes_path}: {e}")
-
-            wandb.init(
-                entity=wandb_entity,
-                project=wandb_project,
-                name=wandb_run_name,
-                notes=wandb_notes,
-                config=OmegaConf.to_container(cfg, resolve=True),
-                mode="offline" if offline_mode else "online",  # Switch to offline mode
-                dir=wandb_dir,  # Specify local directory for offline logs
-            )
-            # Get the exact subfolder for this run
-            run_id = wandb.run.id  # Unique ID for the run
-            run_dir = wandb.run.dir  # Full path to the run's directory
-            if offline_mode:
-                log.info(f"Wandb running in offline mode. Logs will be saved to {os.path.dirname(run_dir)}")
-                log.info(f"Run ID: {run_id}")
-            else:
-                log.info(f"Wandb running online. Run ID: {run_id}")
         # Make vectorized env
         self.env_name = cfg.env.name
         env_type = cfg.env.get("env_type", None)
@@ -161,7 +113,66 @@ class TrainAgent:
         self.result_path = os.path.join(self.logdir, "result.pkl")
         os.makedirs(self.render_dir, exist_ok=True)
         os.makedirs(self.checkpoint_dir, exist_ok=True)
-        self.save_trajs = cfg.train.get("save_trajs", False)
+
+        if self.use_wandb:
+            # Handle the case where wandb is specified purely as a string from CLI (e.g. wandb=online)
+            if isinstance(self.cfg.wandb, str):
+                offline_mode = (self.cfg.wandb == "offline")
+                wandb_dir = "./wandb_offline" if offline_mode else "./wandb"
+                notes_path = "notes.txt"
+                wandb_entity = None
+                wandb_project = self.cfg.env.name
+                wandb_run_name = None
+            else:
+                offline_mode = self.cfg.wandb.get("offline_mode", False)
+                wandb_dir = self.cfg.wandb.get("dir", "./wandb_offline" if offline_mode else "./wandb")
+                notes_path = self.cfg.wandb.get("notes_file", "notes.txt")
+                wandb_entity = self.cfg.wandb.get("entity", None)
+                wandb_project = self.cfg.wandb.get("project", None)
+                wandb_run_name = self.cfg.wandb.get("run", None)
+            
+            # Prioritize top-level run_name if provided
+            if self.cfg.get("run_name") is not None:
+                wandb_run_name = self.cfg.run_name
+            
+            os.makedirs(wandb_dir, exist_ok=True)  # Ensure the directory exists
+            
+            # Read notes from local file if exists
+            wandb_notes = None
+            if os.path.exists(notes_path):
+                try:
+                    with open(notes_path, "r", encoding="utf-8") as f:
+                        wandb_notes = f.read().strip()
+                except Exception as e:
+                    log.warning(f"Failed to read wandb notes file {notes_path}: {e}")
+
+            wandb.init(
+                entity=wandb_entity,
+                project=wandb_project,
+                name=wandb_run_name,
+                notes=wandb_notes,
+                config=OmegaConf.to_container(self.cfg, resolve=True),
+                mode="offline" if offline_mode else "online",  # Switch to offline mode
+                dir=wandb_dir,  # Specify local directory for offline logs
+            )
+            # Get the exact subfolder for this run
+            run_id = wandb.run.id  # Unique ID for the run
+            run_dir = wandb.run.dir  # Full path to the run's directory
+            if offline_mode:
+                log.info(f"Wandb running in offline mode. Logs will be saved to {os.path.dirname(run_dir)}")
+                log.info(f"Run ID: {run_id}")
+            else:
+                log.info(f"Wandb running online. Run ID: {run_id}")
+            
+            # TensorBoard initialization
+            self.tb_log_dir = os.path.join(self.logdir, "tensorboard")
+            os.makedirs(self.tb_log_dir, exist_ok=True)
+            self.writer = SummaryWriter(log_dir=self.tb_log_dir)
+            log.info(f"TensorBoard logging to {self.tb_log_dir}")
+        else:
+            self.writer = None
+
+        self.save_trajs = self.cfg.train.get("save_trajs", False)
         self.log_freq = cfg.train.get("log_freq", 1)
         self.save_model_freq = cfg.train.save_model_freq
         self.render_freq = cfg.train.render.freq

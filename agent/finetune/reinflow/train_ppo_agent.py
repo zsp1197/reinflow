@@ -515,6 +515,11 @@ class TrainPPOAgent(TrainAgent):
                         commit=False,
                     )
                 
+                # TensorBoard logging for evaluation
+                if self.writer is not None:
+                    for key, value in eval_dict.items():
+                        self.writer.add_scalar(key, value, self.itr)
+                
                 if self.current_best_reward < self.buffer.avg_episode_reward:
                     self.current_best_reward = self.buffer.avg_episode_reward
                     self.is_best_so_far = True
@@ -568,5 +573,10 @@ class TrainPPOAgent(TrainAgent):
                         step=self.itr,
                         commit=True,
                     )
+                
+                # TensorBoard logging for training
+                if self.writer is not None:
+                    for key, value in train_log_dict.items():
+                        self.writer.add_scalar(key, value, self.itr)
             with open(self.result_path, "wb") as f:
                 pickle.dump(self.run_results, f)
