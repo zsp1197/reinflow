@@ -27,9 +27,10 @@ EOF
 
     # 开始执行当前参数下的训练配置
     # 注意：PYTHONPATH=$(pwd) 确保脚本能找到 util 模块
-    PYTHONPATH=$(pwd) python script/run.py \
+    python script/run.py \
         --config-dir=cfg/gym/finetune/ant-v2 \
         --config-name=ft_ppo_reflow_mlp \
+        run_name="ft${ft_step}_inf${FIXED_INF_STEPS}" \
         denoising_steps=${FIXED_INF_STEPS} \
         ft_denoising_steps=${ft_step} \
         device=cuda:0 \

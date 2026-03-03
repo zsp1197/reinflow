@@ -27,6 +27,9 @@ Revised by ReinFlow Authors to accomodate resume training and fixing the kitchen
 """
 import os
 import sys
+# Automatically add project root to sys.path
+sys.path.append(os.getcwd())
+
 import logging
 import math
 import hydra

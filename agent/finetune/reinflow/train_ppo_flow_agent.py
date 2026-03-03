@@ -249,18 +249,18 @@ class TrainPPOFlowAgent(TrainPPOAgent):
         
         # always save the last model for resume of training. 
         save_path = os.path.join(self.checkpoint_dir,f"last.pt")
-        torch.save(data, os.path.join(self.checkpoint_dir, save_path))
+        torch.save(data, save_path)
         
         # optionally save intermediate models
         if self.itr % self.save_model_freq == 0 or self.itr == self.n_train_itr - 1:
             save_path = os.path.join(self.checkpoint_dir, f"state_{self.itr}.pt")
-            torch.save(data, os.path.join(self.checkpoint_dir, save_path))
+            torch.save(data, save_path)
             log.info(f"\n Saved model at itr={self.itr} to {save_path}\n ")
         
         # save the best model evaluated so far 
         if self.is_best_so_far:
             save_path = os.path.join(self.checkpoint_dir,f"best.pt")
-            torch.save(data, os.path.join(self.checkpoint_dir, save_path))
+            torch.save(data, save_path)
             log.info(f"\n Saved model with the highest evaluated average episode reward {self.current_best_reward:4.3f} to \n{save_path}\n ")
             self.is_best_so_far =False
     

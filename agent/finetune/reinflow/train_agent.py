@@ -62,6 +62,10 @@ class TrainAgent:
                 wandb_project = cfg.wandb.get("project", None)
                 wandb_run_name = cfg.wandb.get("run", None)
             
+            # Prioritize top-level run_name if provided
+            if cfg.get("run_name") is not None:
+                wandb_run_name = cfg.run_name
+            
             os.makedirs(wandb_dir, exist_ok=True)  # Ensure the directory exists
             
             # Read notes from local file if exists
