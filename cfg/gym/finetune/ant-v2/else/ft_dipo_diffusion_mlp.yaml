@@ -22,6 +22,7 @@ base_policy_path: ${oc.env:REINFLOW_LOG_DIR}/gym/pretrain/ant-medium-expert-v0_p
 normalization_path: ${oc.env:REINFLOW_DATA_DIR}/gym/${env_name}/normalization.npz
 
 seed: 42
+run_name: null
 device: cuda:0
 denoising_steps: 20
 ft_denoising_steps: 10

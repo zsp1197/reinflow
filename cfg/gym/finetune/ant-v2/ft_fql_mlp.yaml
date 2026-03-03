@@ -27,6 +27,7 @@ normalization_path: ${dataset_dir}/normalization.npz
 only_optimize_bc_flow: false 
 
 seed: 42
+run_name: null
 device: cuda:0
 sim_device: cuda:0
 denoising_steps: 4

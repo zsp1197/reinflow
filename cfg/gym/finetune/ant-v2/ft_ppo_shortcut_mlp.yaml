@@ -21,6 +21,7 @@ base_policy_path: ${oc.env:REINFLOW_LOG_DIR}/gym/pretrain/ant-v2/ShortCut/2025-0
 resume_path: null
 normalization_path: ${oc.env:REINFLOW_DATA_DIR}/gym/${env_name}/normalization.npz
 seed: 42
+run_name: null
 device: cuda:0
 sim_device: cuda:0
 denoising_steps: 4
