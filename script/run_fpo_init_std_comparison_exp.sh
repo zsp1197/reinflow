@@ -1,44 +1,80 @@
 #!/bin/bash
 
-# 本脚本用于测试 fpo_init_std 算法下，不同的 std_min 和 std_max 取值对训练效果的影响。
-# 固定 inference_steps 和 ft_denoising_steps。
+# 本脚本用于比较 FPO Init Std 在训练阶段使用不同初始噪声分布策略的效果。
+# 固定 std_min=0.5, std_max=1.5
+# 限制单个实验总时长不超过 8h
 
-STD_MINS=(0.1 0.4)
-STD_MAXS=(1.0 1.5)
+STD_MIN=0.5
+STD_MAX=1.5
+TIMEOUT_DURATION="8h"
 
-echo "Starting FPO Init Std comparison experiments..."
+echo "Starting FPO Init Std comparison experiments (Sync vs No_Sync)..."
 
-for std_min in "${STD_MINS[@]}"; do
-    for std_max in "${STD_MAXS[@]}"; do
-        echo "================================================================"
-        echo "Starting experiment with std_min=${std_min}, std_max=${std_max}"
-        echo "================================================================"
+# Experiment 1: train_std_sync=false (Training uses fixed N(0,1), inference uses adaptive)
+echo "================================================================"
+echo "Starting experiment 1/2: train_std_sync=false"
+echo "Timeout set to ${TIMEOUT_DURATION}"
+echo "================================================================"
 
-        # 动态写入 notes.txt，增加关于自适应初始方差的备注
-        cat <<EOF > notes.txt
-[FPO Init Std Experiment]
+cat <<EOF > notes.txt
+[FPO Init Std Experiment - NO SYNC]
 Environment: ant-medium-expert-v2 (Gym)
-Policy: ft_fpo_init_std_mlp (FPOInitStdFlow)
-std_min: ${std_min}
-std_max: ${std_max}
-
-Objective: This experiment evaluates the impact of dynamic initialization standard deviation with minimum ${std_min} and maximum ${std_max}.
+Policy: ft_fpo_init_std_mlp
+std_min: ${STD_MIN}
+std_max: ${STD_MAX}
+train_std_sync: false (Training initial CFM noise is fixed N(0,1), inference is adaptive N(0, init_std))
 EOF
 
-        # 开始执行当前参数下的训练配置
-        python script/run.py \
-            --config-dir=cfg/gym/finetune/ant-v2 \
-            --config-name=ft_fpo_init_std_mlp \
-            run_name="fpo_init_std_min${std_min}_max${std_max}" \
-            model.std_min=${std_min} \
-            model.std_max=${std_max} \
-            device=cuda:0 \
-            sim_device=cuda:0 \
-            wandb=online
+timeout ${TIMEOUT_DURATION} python script/run.py \
+    --config-dir=cfg/gym/finetune/ant-v2 \
+    --config-name=ft_fpo_init_std_mlp \
+    run_name="fpo_init_std_nosync_min${STD_MIN}_max${STD_MAX}" \
+    model.std_min=${STD_MIN} \
+    model.std_max=${STD_MAX} \
+    model.train_std_sync=false \
+    device=cuda:0 \
+    sim_device=cuda:0 \
+    wandb=online
 
-        echo "Finished experiment with std_min=${std_min}, std_max=${std_max}"
-        echo "================================================================"
-    done
-done
+# `$?` is 124 if `timeout` command terminates the script
+if [ $? -eq 124 ]; then
+    echo "Experiment 1 timed out after ${TIMEOUT_DURATION}. Moving to next..."
+else
+    echo "Experiment 1 finished before timeout."
+fi
 
-echo "All FPO init_std experiments completed successfully!"
+
+# Experiment 2: train_std_sync=true (Training uses adaptive noise, synchronized with inference)
+echo "================================================================"
+echo "Starting experiment 2/2: train_std_sync=true"
+echo "Timeout set to ${TIMEOUT_DURATION}"
+echo "================================================================"
+
+cat <<EOF > notes.txt
+[FPO Init Std Experiment - SYNC]
+Environment: ant-medium-expert-v2 (Gym)
+Policy: ft_fpo_init_std_mlp
+std_min: ${STD_MIN}
+std_max: ${STD_MAX}
+train_std_sync: true (Training initial CFM noise uses adaptive N(0, init_std), identical to inference)
+EOF
+
+timeout ${TIMEOUT_DURATION} python script/run.py \
+    --config-dir=cfg/gym/finetune/ant-v2 \
+    --config-name=ft_fpo_init_std_mlp \
+    run_name="fpo_init_std_sync_min${STD_MIN}_max${STD_MAX}" \
+    model.std_min=${STD_MIN} \
+    model.std_max=${STD_MAX} \
+    model.train_std_sync=true \
+    device=cuda:0 \
+    sim_device=cuda:0 \
+    wandb=online
+
+if [ $? -eq 124 ]; then
+    echo "Experiment 2 timed out after ${TIMEOUT_DURATION}."
+else
+    echo "Experiment 2 finished before timeout."
+fi
+
+echo "================================================================"
+echo "All comparisons completed."

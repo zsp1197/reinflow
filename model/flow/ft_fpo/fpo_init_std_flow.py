@@ -15,13 +15,14 @@ class FPOInitStdFlow(FPOFlow):
     Flow-matching Policy Optimization (FPO) Model with adaptive initial std.
     Inherits from FPOFlow and adaptively scales the initial noise based on value estimates.
     """
-    def __init__(self, std_min=0.4, std_max=1.5, std_lr=0.01, **kwargs):
+    def __init__(self, std_min=0.4, std_max=1.5, std_lr=0.01, train_std_sync: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.std_min = std_min
         self.std_max = std_max
         self.std_lr = std_lr
         self.init_std = 1.0
-        log.info(f"Initialized FPOInitStdFlow with std_min={std_min}, std_max={std_max}, std_lr={std_lr}")
+        self.train_std_sync = train_std_sync
+        log.info(f"Initialized FPOInitStdFlow with std_min={std_min}, std_max={std_max}, std_lr={std_lr}, train_std_sync={train_std_sync}")
 
     def compute_cfm_loss(self, cond, x1, eps, t):
         """
@@ -31,8 +32,12 @@ class FPOInitStdFlow(FPOFlow):
         x1_exp = x1.unsqueeze(1).expand(B, N, H, D)
         t_exp = t.unsqueeze(-1)
         
-        # Apply init_std
-        x_0 = eps * self.init_std
+        # Apply init_std if train_std_sync is enabled, else use base N(0, 1) eps mapping
+        if self.train_std_sync:
+            x_0 = eps * self.init_std
+        else:
+            x_0 = eps
+            
         x_t = (1 - t_exp) * x_0 + t_exp * x1_exp
         
         x_t_flat = x_t.reshape(B*N, H, D)
@@ -81,8 +86,9 @@ class FPOInitStdFlow(FPOFlow):
         chains_next = x_chain[:, 1:, :, :].flatten(-2,-1)
         chains_stds = torch.zeros_like(chains_prev, device=self.device)
         
-        # initial probability with self.init_std
-        init_dist = Normal(torch.zeros(B, self.horizon_steps * self.action_dim, device=self.device), self.init_std)
+        # logprob for initial state
+        train_init_std = self.init_std if self.train_std_sync else 1.0
+        init_dist = Normal(torch.zeros(B, self.horizon_steps * self.action_dim, device=self.device), train_init_std)
         logprob_init = init_dist.log_prob(x_chain[:,0].reshape(B,-1)).sum(-1)
         if get_entropy:
             entropy_init = init_dist.entropy().sum(-1)

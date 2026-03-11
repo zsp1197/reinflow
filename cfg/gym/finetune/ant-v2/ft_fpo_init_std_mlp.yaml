@@ -91,6 +91,7 @@ model:
   std_min: 0.4
   std_max: 1.5
   std_lr: 0.01
+  train_std_sync: false
   device: ${device}
   policy:
     _target_: model.flow.mlp_flow.FlowMLP
