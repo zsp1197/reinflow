@@ -52,13 +52,13 @@ class RobomimicImageWrapper(gym.Env):
         ],
         clamp_obs=False,
         init_state=None,
-        # render_hw=(256, 256),   # revised by ReinFlow authors to make the render() function have a unified interface. 
+        # render_hw=(256, 256),   # revised by ReinFlow authors to make the render() function have a unified interface.
         render_camera_name="agentview",
     ):
         self.env = env
         self.init_state = init_state
         self.has_reset_before = False
-        # self.render_hw = render_hw   # revised by ReinFlow authors to make the render() function have a unified interface. 
+        # self.render_hw = render_hw   # revised by ReinFlow authors to make the render() function have a unified interface.
         self.render_camera_name = render_camera_name
         self.video_writer = None
         self.clamp_obs = clamp_obs
@@ -118,12 +118,13 @@ class RobomimicImageWrapper(gym.Env):
         obs = {"rgb": None, "state": None}  # stack rgb if multiple cameras
         for key in self.obs_keys:
             if key in self.image_keys:
+                img = raw_obs[key]
+                if img.ndim == 3:  # H, W, C
+                    img = img.transpose(2, 0, 1)  # -> C, H, W
                 if obs["rgb"] is None:
-                    obs["rgb"] = raw_obs[key]
+                    obs["rgb"] = img
                 else:
-                    obs["rgb"] = np.concatenate(
-                        [obs["rgb"], raw_obs[key]], axis=0
-                    )  # C H W
+                    obs["rgb"] = np.concatenate([obs["rgb"], img], axis=0)  # C H W
             else:
                 if obs["state"] is None:
                     obs["state"] = raw_obs[key]
@@ -131,7 +132,14 @@ class RobomimicImageWrapper(gym.Env):
                     obs["state"] = np.concatenate([obs["state"], raw_obs[key]], axis=-1)
         if self.normalize:
             obs["state"] = self.normalize_obs(obs["state"])
-        obs["rgb"] *= 255  # [0, 1] -> [0, 255], in float64
+
+        # robomimic/robosuite by default returns uint8 [0, 255] images.
+        # we convert it to float32 [0, 255] for the VitEncoder (which does obs/255.0 - 0.5)
+        if obs["rgb"].dtype == np.uint8:
+            obs["rgb"] = obs["rgb"].astype(np.float32)
+        else:
+            # if somehow it's already [0, 1] float, we scale it.
+            obs["rgb"] = obs["rgb"].astype(np.float32) * 255.0
         return obs
 
     def seed(self, seed=None):
@@ -192,9 +200,9 @@ class RobomimicImageWrapper(gym.Env):
     #         width=w,
     #         camera_name=self.render_camera_name,
     #     )
-    
-    def render(self, mode="rgb_array", width:int=256, height:int=256):
-        # revised by ReinFlow authors to make the render() function have a unified interface. 
+
+    def render(self, mode="rgb_array", width: int = 256, height: int = 256):
+        # revised by ReinFlow authors to make the render() function have a unified interface.
         return self.env.render(
             mode=mode,
             height=height,

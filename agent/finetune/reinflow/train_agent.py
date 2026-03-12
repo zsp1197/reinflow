@@ -34,17 +34,20 @@ import hydra
 import logging
 import wandb
 from torch.utils.tensorboard import SummaryWriter
+
 log = logging.getLogger(__name__)
 from env.gym_utils import make_async
 from util.reproducibility import set_seed_everywhere
-class TrainAgent:        
+
+
+class TrainAgent:
     def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
         self.device = cfg.device
-        self.seed=self.cfg.get('seed', 42)        
+        self.seed = self.cfg.get("seed", 42)
         set_seed_everywhere(self.seed)
-        # Wandb       
+        # Wandb
         self.use_wandb = cfg.wandb is not None
         # Make vectorized env
         self.env_name = cfg.env.name
@@ -93,7 +96,7 @@ class TrainAgent:
 
         # Training params
         self.itr = 0
-        self.n_train_itr = cfg.train.get('n_train_itr', 0) 
+        self.n_train_itr = cfg.train.get("n_train_itr", 0)
         self.val_freq = cfg.train.val_freq
         self.force_train = cfg.train.get("force_train", False)
         self.n_steps = cfg.train.n_steps
@@ -103,9 +106,9 @@ class TrainAgent:
             else cfg.env.best_reward_threshold_for_success
         )
         self.max_grad_norm = cfg.train.get("max_grad_norm", None)
-        self.resume_path = cfg.get('resume_path', None)
+        self.resume_path = cfg.get("resume_path", None)
         self.resume = self.resume_path is not None
-        
+
         # Logging, rendering, checkpoints
         self.logdir = cfg.logdir
         self.render_dir = os.path.join(self.logdir, "render")
@@ -114,10 +117,16 @@ class TrainAgent:
         os.makedirs(self.render_dir, exist_ok=True)
         os.makedirs(self.checkpoint_dir, exist_ok=True)
 
+        # TensorBoard initialization (Always local)
+        self.tb_log_dir = os.path.join(self.logdir, "tensorboard")
+        os.makedirs(self.tb_log_dir, exist_ok=True)
+        self.writer = SummaryWriter(log_dir=self.tb_log_dir)
+        log.info(f"TensorBoard logging to {self.tb_log_dir}")
+
         if self.use_wandb:
             # Handle the case where wandb is specified purely as a string from CLI (e.g. wandb=online)
             if isinstance(self.cfg.wandb, str):
-                offline_mode = (self.cfg.wandb == "offline")
+                offline_mode = self.cfg.wandb == "offline"
                 wandb_dir = "./wandb_offline" if offline_mode else "./wandb"
                 notes_path = "notes.txt"
                 wandb_entity = None
@@ -125,18 +134,29 @@ class TrainAgent:
                 wandb_run_name = None
             else:
                 offline_mode = self.cfg.wandb.get("offline_mode", False)
-                wandb_dir = self.cfg.wandb.get("dir", "./wandb_offline" if offline_mode else "./wandb")
+                wandb_dir = self.cfg.wandb.get(
+                    "dir", "./wandb_offline" if offline_mode else "./wandb"
+                )
                 notes_path = self.cfg.wandb.get("notes_file", "notes.txt")
                 wandb_entity = self.cfg.wandb.get("entity", None)
                 wandb_project = self.cfg.wandb.get("project", None)
                 wandb_run_name = self.cfg.wandb.get("run", None)
-            
+
+            # Robust check for entity: if it's null string or empty, default to offline.
+            if wandb_entity in ["null", "", None]:
+                if not offline_mode:
+                    log.warning(
+                        "No valid W&B entity provided (found 'null' or empty). Forcing offline mode."
+                    )
+                    offline_mode = True
+                wandb_entity = None  # Setting it to None for local run
+
             # Prioritize top-level run_name if provided
             if self.cfg.get("run_name") is not None:
                 wandb_run_name = self.cfg.run_name
-            
+
             os.makedirs(wandb_dir, exist_ok=True)  # Ensure the directory exists
-            
+
             # Read notes from local file if exists
             wandb_notes = None
             if os.path.exists(notes_path):
@@ -159,18 +179,12 @@ class TrainAgent:
             run_id = wandb.run.id  # Unique ID for the run
             run_dir = wandb.run.dir  # Full path to the run's directory
             if offline_mode:
-                log.info(f"Wandb running in offline mode. Logs will be saved to {os.path.dirname(run_dir)}")
+                log.info(
+                    f"Wandb running in offline mode. Logs will be saved to {os.path.dirname(run_dir)}"
+                )
                 log.info(f"Run ID: {run_id}")
             else:
                 log.info(f"Wandb running online. Run ID: {run_id}")
-            
-            # TensorBoard initialization
-            self.tb_log_dir = os.path.join(self.logdir, "tensorboard")
-            os.makedirs(self.tb_log_dir, exist_ok=True)
-            self.writer = SummaryWriter(log_dir=self.tb_log_dir)
-            log.info(f"TensorBoard logging to {self.tb_log_dir}")
-        else:
-            self.writer = None
 
         self.save_trajs = self.cfg.train.get("save_trajs", False)
         self.log_freq = cfg.train.get("log_freq", 1)
@@ -188,8 +202,6 @@ class TrainAgent:
             else None
         )
 
-    
-        
     def run(self):
         pass
 
@@ -241,15 +253,18 @@ class TrainAgent:
             logging.info(f"<-- Reset environment {env_ind} with task {task}")
         return obs
 
-    
     def clear_cache(self):
         log.info(f"clearing cache...")
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-    
+
     def inspect_memory(self):
         log.info(f"CPU Memory Used: {psutil.virtual_memory().used / 1024**3:.2f} GB")
         if torch.cuda.is_available():
-            log.info(f"GPU Memory Allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
-            log.info(f"GPU Memory Cached:    {torch.cuda.memory_reserved() / 1024**3:.2f}  GB")
+            log.info(
+                f"GPU Memory Allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB"
+            )
+            log.info(
+                f"GPU Memory Cached:    {torch.cuda.memory_reserved() / 1024**3:.2f}  GB"
+            )

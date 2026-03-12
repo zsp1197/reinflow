@@ -3,7 +3,7 @@ defaults:
 hydra:
   run:
     dir: ${logdir}
-_target_: agent.finetune.train_qsm_diffusion_agent.TrainQSMDiffusionAgent
+_target_: agent.finetune.dppo.train_qsm_diffusion_agent.TrainQSMDiffusionAgent
 
 name: ${env_name}_qsm_diffusion_mlp_ta${horizon_steps}_td${denoising_steps}
 logdir: ${oc.env:DPPO_LOG_DIR}/robomimic/finetune/${name}/${now:%Y-%m-%d}_${now:%H-%M-%S}_${seed}

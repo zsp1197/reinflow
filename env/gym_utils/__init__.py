@@ -28,8 +28,9 @@ try:
 except ImportError:
     Iterable = (tuple, list)
 
+
 def make_async(
-    env_name:str,
+    env_name: str,
     num_envs=1,
     asynchronous=True,
     wrappers=None,
@@ -94,6 +95,7 @@ def make_async(
         from furniture_bench.envs.observation import DEFAULT_STATE_OBS
         from furniture_bench.envs.furniture_rl_sim_env import FurnitureRLSimEnv
         from env.gym_utils.wrapper.furniture import FurnitureRLSimEnvMultiStepWrapper
+
         env = FurnitureRLSimEnv(
             act_rot_repr="rot_6d",
             action_type="pos",
@@ -149,9 +151,7 @@ def make_async(
     else:
         import d4rl.gym_mujoco
     from gym.envs import make as make_
-    
 
-    
     def _make_env():
         if robomimic_env_cfg_path is not None:
             obs_modality_dict = {
@@ -170,11 +170,11 @@ def make_async(
                 obs_modality_dict.pop("rgb")
             ObsUtils.initialize_obs_modality_mapping_from_dict(obs_modality_dict)
             if render_offscreen or use_image_obs:
-                os.environ[""] = "egl"
+                os.environ["MUJOCO_GL"] = "egl"
             with open(robomimic_env_cfg_path, "r") as f:
                 env_meta = json.load(f)
             env_meta["reward_shaping"] = reward_shaping
-            
+
             print(f"Robomimic env_meta={env_meta}")
             print(f"""Robomimic env_name={env_meta["env_name"]}""")
             env = EnvUtils.create_env_from_metadata(
@@ -190,27 +190,29 @@ def make_async(
             # https://github.com/ARISE-Initiative/robosuite/blob/92abf5595eddb3a845cd1093703e5a3ccd01e77e/robosuite/environments/base.py#L247-L248
             env.env.hard_reset = False
         else:  # d3il, gym
-            if "kitchen" not in env_name:  # d4rl kitchen does not support rendering! use 
+            if (
+                "kitchen" not in env_name
+            ):  # d4rl kitchen does not support rendering! use
                 kwargs["render"] = render
-            
+
             # print(f"environment id={id}")
             if "Humanoid" in env_name:
                 print(f"make humanoid!")
-                env=make_('Humanoid-v3')
-            else: # gym, Franka Kitchen
-                print(f'Making gym environment id={env_name}')
+                env = make_("Humanoid-v3")
+            else:  # gym, Franka Kitchen
+                print(f"Making gym environment id={env_name}")
                 env = make_(env_name, **kwargs)
-        
+
         # add wrappers
         if wrappers is not None:
             for wrapper, args in wrappers.items():
                 env = wrapper_dict[wrapper](env, **args)
-        
-        if 'kitchen' in env_name.lower():
-            # Currently we do not support rendering for kitchen environments. 
+
+        if "kitchen" in env_name.lower():
+            # Currently we do not support rendering for kitchen environments.
             pass
-            # # print(env.env.sim.model.camera_id2name) 
-            # # print(env.unwrapped.sim.model.camera_id2name) 
+            # # print(env.env.sim.model.camera_id2name)
+            # # print(env.unwrapped.sim.model.camera_id2name)
             # model = env.unwrapped.sim.model
             # for i in range(model.ncam):
             #     name = model.id2name(i, "camera")
@@ -219,7 +221,7 @@ def make_async(
             # Camera 0: left_cap
             # Camera 1: right_cap
             # """
-                
+
             # print(f"env.unwrapped.sim.render()={env.unwrapped.sim.render}")
             # import inspect
             # print(f"inspect.getsource(env.unwrapped.sim.render)={inspect.getsource(env.unwrapped.sim.render)}")
