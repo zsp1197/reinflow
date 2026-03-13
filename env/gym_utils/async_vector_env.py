@@ -35,6 +35,7 @@ Add render().
 
 from typing import Optional, Union, List
 
+import os
 import numpy as np
 import multiprocessing as mp
 import time
@@ -161,6 +162,14 @@ class AsyncVectorEnv(VectorEnv):
         worker=None,
         delay_init=False,
     ):
+        # Force 'osmesa' in the main process during dummy environment creation.
+        # This prevents the parent process from initializing EGL, which
+        # avoids 'fork' state corruption on Blackwell/Nvidia 570+ drivers.
+        _prev_gl = os.environ.get("MUJOCO_GL", "egl")
+        _prev_pl = os.environ.get("PYOPENGL_PLATFORM", "egl")
+        os.environ["MUJOCO_GL"] = "osmesa"
+        os.environ["PYOPENGL_PLATFORM"] = "osmesa"
+
         ctx = mp.get_context(context)
         self.env_fns = env_fns
         self.shared_memory = shared_memory
@@ -176,6 +185,21 @@ class AsyncVectorEnv(VectorEnv):
             action_space = action_space or dummy_env.action_space
         dummy_env.close()
         del dummy_env
+
+        # Restore the original EGL backend for the worker processes.
+        os.environ["MUJOCO_GL"] = _prev_gl
+        os.environ["PYOPENGL_PLATFORM"] = _prev_pl
+
+        # Reset EGL display global in main process just in case.
+        # This ensures child processes initialize their own EGL displays.
+        try:
+            import robosuite.renderers.context.egl_context as egl_context
+
+            if hasattr(egl_context, "EGL_DISPLAY"):
+                egl_context.EGL_DISPLAY = None
+        except:
+            pass
+
         super().__init__(
             num_envs=len(env_fns),
             observation_space=observation_space,
@@ -231,10 +255,8 @@ class AsyncVectorEnv(VectorEnv):
                 process.daemon = daemon
                 process.start()
                 child_pipe.close()
-                if (
-                    delay_init
-                ):  # D3IL complains about temporary XML if n_envs is too large. Adding a delay avoids the error.
-                    time.sleep(0.1)
+                if delay_init or True:  # Force delay for EGL/Blackwell stability.
+                    time.sleep(0.5)
 
         self._state = AsyncState.DEFAULT
         # self._check_spaces()
@@ -734,6 +756,15 @@ class AsyncVectorEnv(VectorEnv):
 
 
 def _worker(index, env_fn, pipe, parent_pipe, shared_memory, error_queue):
+    # Reset EGL in worker to avoid fork issues on Blackwell.
+    try:
+        import robosuite.renderers.context.egl_context as egl_context
+
+        if hasattr(egl_context, "EGL_DISPLAY"):
+            egl_context.EGL_DISPLAY = None
+    except:
+        pass
+
     assert shared_memory is None
     env = env_fn()
     parent_pipe.close()
@@ -797,6 +828,15 @@ def _worker(index, env_fn, pipe, parent_pipe, shared_memory, error_queue):
 
 
 def _worker_shared_memory(index, env_fn, pipe, parent_pipe, shared_memory, error_queue):
+    # Reset EGL in worker to avoid fork issues on Blackwell.
+    try:
+        import robosuite.renderers.context.egl_context as egl_context
+
+        if hasattr(egl_context, "EGL_DISPLAY"):
+            egl_context.EGL_DISPLAY = None
+    except:
+        pass
+
     assert shared_memory is not None
     env = env_fn()
     observation_space = env.observation_space

@@ -25,7 +25,16 @@ import sys
 
 # Set defaults and parse custom overrides before ANY other imports
 # This ensures rendering backends and environment variables are ready early.
-os.environ.setdefault("MUJOCO_GL", "egl")
+os.environ.setdefault("MUJOCO_GL", "osmesa")
+os.environ.setdefault("PYOPENGL_PLATFORM", "osmesa")
+# Blackwell/Nvidia 570+ drivers are sensitive to EGL device selection.
+# Force device 0 if not specified to avoid Mesa permission errors.
+if (
+    "MUJOCO_EGL_DEVICE_ID" not in os.environ
+    and "CUDA_VISIBLE_DEVICES" not in os.environ
+):
+    os.environ["MUJOCO_EGL_DEVICE_ID"] = "0"
+
 os.environ.setdefault("REINFLOW_LOG_DIR", os.path.abspath("log"))
 os.environ.setdefault("REINFLOW_DATA_DIR", os.path.abspath("data"))
 os.environ.setdefault("REINFLOW_WANDB_ENTITY", "")
@@ -121,8 +130,16 @@ def main(cfg: OmegaConf):
     if sim_device is not None:
         if isinstance(sim_device, str) and sim_device.startswith("cuda:"):
             sim_device = int(sim_device.split("cuda:")[1])
-        else:
-            sim_device = int(sim_device)
+        # Reset EGL display global in main process to prevent 'fork' issues.
+        # This ensures child processes initialize their own EGL displays.
+        try:
+            import robosuite.renderers.context.egl_context as egl_context
+
+            if hasattr(egl_context, "EGL_DISPLAY"):
+                egl_context.EGL_DISPLAY = None
+        except:
+            pass
+
         os.environ["MUJOCO_GL"] = "egl"
         os.environ["MUJOCO_sim_device_ID"] = str(sim_device)
         os.environ["sim_device_ID"] = str(sim_device)
