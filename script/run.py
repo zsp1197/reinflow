@@ -22,6 +22,62 @@
 
 import os
 import sys
+
+# Set defaults and parse custom overrides before ANY other imports
+# This ensures rendering backends and environment variables are ready early.
+os.environ.setdefault("MUJOCO_GL", "egl")
+os.environ.setdefault("REINFLOW_LOG_DIR", os.path.abspath("log"))
+os.environ.setdefault("REINFLOW_DATA_DIR", os.path.abspath("data"))
+os.environ.setdefault("REINFLOW_WANDB_ENTITY", "")
+os.environ.setdefault("DPPO_LOG_DIR", os.path.abspath("log"))
+os.environ.setdefault("DPPO_DATA_DIR", os.path.abspath("data"))
+os.environ.setdefault("DPPO_WANDB_ENTITY", "")
+
+_args_to_remove = []
+for arg in sys.argv[1:]:
+    if arg.startswith("log_dir="):
+        os.environ["REINFLOW_LOG_DIR"] = os.path.abspath(arg.split("=")[1])
+        os.environ["DPPO_LOG_DIR"] = os.environ["REINFLOW_LOG_DIR"]
+        _args_to_remove.append(arg)
+    elif arg.startswith("data_dir="):
+        os.environ["REINFLOW_DATA_DIR"] = os.path.abspath(arg.split("=")[1])
+        os.environ["DPPO_DATA_DIR"] = os.environ["REINFLOW_DATA_DIR"]
+        _args_to_remove.append(arg)
+    elif arg.startswith("wandb="):
+        val = arg.split("=")[1].lower()
+        if val in ["null", "none"]:
+            os.environ["WANDB_MODE"] = "disabled"
+        else:
+            os.environ["WANDB_MODE"] = val
+        _args_to_remove.append(arg)
+    elif arg.startswith("--config-name="):
+        # Support deep-nested configs like --config-name=robomimic/finetune/can/ft_ppo_reflow_mlp_img
+        # by splitting into --config-dir and a short --config-name
+        config_path_val = arg.split("=")[1]
+        if "/" in config_path_val:
+            parts = config_path_val.split("/")
+            config_name = parts[-1]
+            config_rel_dir = "/".join(parts[:-1])
+            # Set the absolute path for config-dir
+            abs_config_dir = os.path.abspath(os.path.join("cfg", config_rel_dir))
+
+            # Replace the argument in sys.argv
+            idx = sys.argv.index(arg)
+            sys.argv[idx] = f"--config-name={config_name}"
+            sys.argv.insert(idx, f"--config-dir={abs_config_dir}")
+            print(
+                f"Auto-resolved nested config: --config-dir={abs_config_dir} --config-name={config_name}"
+            )
+
+for arg in _args_to_remove:
+    sys.argv.remove(arg)
+
+# Default to offline if no entity is provided
+if not os.environ.get("REINFLOW_WANDB_ENTITY") and not os.environ.get(
+    "DPPO_WANDB_ENTITY"
+):
+    os.environ.setdefault("WANDB_MODE", "offline")
+
 import logging
 import math
 import gc
@@ -37,20 +93,6 @@ from download_url import (
     get_normalization_download_url,
     get_checkpoint_download_url,
 )
-
-# Set defaults before hydra.main
-os.environ.setdefault("REINFLOW_LOG_DIR", os.path.abspath("log"))
-os.environ.setdefault("REINFLOW_DATA_DIR", os.path.abspath("data"))
-os.environ.setdefault("REINFLOW_WANDB_ENTITY", "")
-os.environ.setdefault("DPPO_LOG_DIR", os.path.abspath("log"))
-os.environ.setdefault("DPPO_DATA_DIR", os.path.abspath("data"))
-os.environ.setdefault("DPPO_WANDB_ENTITY", "")
-
-# If no W&B entity is provided, default to offline mode
-if not os.environ.get("REINFLOW_WANDB_ENTITY") and not os.environ.get(
-    "DPPO_WANDB_ENTITY"
-):
-    os.environ.setdefault("WANDB_MODE", "offline")
 
 os.environ["D4RL_SUPPRESS_IMPORT_ERROR"] = "1"
 
